@@ -14,40 +14,15 @@ import (
 var db = "."
 
 func main() {
-	accessBearer, err := ioutil.ReadFile(db + "accessBearer")
+	accessBearer, err := ioutil.ReadFile("accessBearer")
 
 	if err != nil {
 		initialize()
 	} else {
 		os.Setenv("AccessBearer", string(accessBearer))
 	}
-}
 
-func exchangeCode(code string) bool {
-	req, err := http.NewRequest("POST", "https://accounts.spotify.com/api/token", strings.NewReader("grant_type=authorization_code&code="+code+"&redirect_uri=http://localhost:3456/catch"))
-	if err != nil {
-		panic(err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Authorization", "Basic NzE1YzE1ZmM3NTAzNDAxZmIxMzZkNmE3OTA3OWI1MGM6ZTkxZWZkZDAzNDVkNDlkNTllOGE2ZDc1YjUzZTE2YTE=")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		panic(err)
-	}
-	defer resp.Body.Close()
-
-	body, _ := ioutil.ReadAll(resp.Body)
-	bodyMap := make(map[string]interface{})
-
-	err = json.Unmarshal(body, &bodyMap)
-	if err != nil {
-		panic(err)
-	}
-
-	write("accessBearer", "Bearer "+bodyMap["access_token"].(string))
-	write("refreshBody", "grant_type=refresh_token&refresh_token="+bodyMap["refresh_token"].(string))
-
-	return true
+	write("id", get("me")["id"].(string))
 }
 
 func initialize() {
@@ -70,8 +45,50 @@ func serve(done chan bool) {
 	http.ListenAndServe(":3456", nil)
 }
 
+func exchangeCode(code string) bool {
+	req, err := http.NewRequest("POST", "https://accounts.spotify.com/api/token", strings.NewReader("grant_type=authorization_code&code="+code+"&redirect_uri=http://localhost:3456/catch"))
+	if err != nil {
+		panic(err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Authorization", "Basic NzE1YzE1ZmM3NTAzNDAxZmIxMzZkNmE3OTA3OWI1MGM6ZTkxZWZkZDAzNDVkNDlkNTllOGE2ZDc1YjUzZTE2YTE=")
+	resp, err := http.DefaultClient.Do(req)
+	check(err)
+	defer resp.Body.Close()
+
+	body, _ := ioutil.ReadAll(resp.Body)
+	bodyMap := make(map[string]interface{})
+
+	err = json.Unmarshal(body, &bodyMap)
+	check(err)
+
+	os.Setenv("AccessBearer", bodyMap["access_token"].(string))
+	write("accessBearer", "Bearer "+bodyMap["access_token"].(string))
+	write("refreshBody", "grant_type=refresh_token&refresh_token="+bodyMap["refresh_token"].(string))
+
+	return true
+}
+
+func get(endpoint string) map[string]interface{} {
+	url := "https://api.spotify.com/v1/" + endpoint
+	req, _ := http.NewRequest("GET", url, nil)
+	req.Header.Set("Authorization", os.Getenv("AccessBearer"))
+
+	resp, err := http.DefaultClient.Do(req)
+	check(err)
+	defer resp.Body.Close()
+
+	res, _ := ioutil.ReadAll(resp.Body)
+	resMap := make(map[string]interface{})
+
+	err = json.Unmarshal(res, &resMap)
+	check(err)
+
+	return resMap
+}
+
 func write(name, content string) error {
-	target := db + name
+	target := name
 	f, err := os.Create(target)
 	if err != nil {
 		return err
@@ -79,4 +96,10 @@ func write(name, content string) error {
 	defer f.Close()
 	f.WriteString(content)
 	return nil
+}
+
+func check(err error) {
+	if err != nil {
+		fmt.Println("Error: ", err)
+	}
 }
