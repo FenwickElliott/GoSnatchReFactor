@@ -70,12 +70,13 @@ func serve(done chan bool) {
 	http.ListenAndServe(":3456", nil)
 }
 
-func write(name, content string) {
+func write(name, content string) error {
 	target := db + name
 	f, err := os.Create(target)
 	if err != nil {
-		// return err
+		return err
 	}
 	defer f.Close()
 	f.WriteString(content)
+	return nil
 }
